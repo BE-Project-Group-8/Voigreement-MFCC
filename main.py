@@ -9,13 +9,6 @@ import time
 
 
 #path to training data
-source   = "Build_Set/"   
-modelpath = "Testing_Models/"
-test_file = "Build_Set_Text.txt"        
-file_paths = open(test_file,'r')
-
-
-#path to training data
 source   = "Testing_Audio/"   
 
 #path where training speakers will be saved

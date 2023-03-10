@@ -33,3 +33,8 @@ Lance-007/lance_2.wav
 Lance-007/lance_3.wav
 Lance-007/lance_4.wav
 Lance-007/lance_5.wav
+Irfan-008/irfan_1.wav
+Irfan-008/irfan_2.wav
+Irfan-008/irfan_3.wav
+Irfan-008/irfan_4.wav
+Irfan-008/irfan_5.wav

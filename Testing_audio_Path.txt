@@ -10,3 +10,5 @@ P3.wav
 P4.wav
 P5.wav
 P6.wav
+lance.wav
+irfan.wav
