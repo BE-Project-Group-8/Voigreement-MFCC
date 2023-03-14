@@ -1,73 +1,92 @@
+from fastapi import FastAPI, File, UploadFile
+import shutil
 import os
-import _pickle as cPickle
-import numpy as np
+from pydub import AudioSegment
 from scipy.io.wavfile import read
 from FeatureExtraction import extract_features
-import warnings
-warnings.filterwarnings("ignore")
-import time
+import numpy as np
+from sklearn.mixture import GaussianMixture as GMM
+import _pickle as cPickle
+
+app = FastAPI()
 
 
-#path to training data
-source   = "Testing_Audio/"   
+@app.post("/api/register/{username}")
+async def register(username: str, file: UploadFile):
+    filepath = f"uploadedFiles/{username}"
+    if not os.path.exists(filepath):
+        os.makedirs(filepath)
+    with open(f"{filepath}/{username}.wav", "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-#path where training speakers will be saved
-modelpath = "Trained_Speech_Models/"
+    t1 = 0
+    t2 = 5
+    seg=0
+    for t2 in range(5,30,5):
+        seg=seg+1
+        newAudio = AudioSegment.from_wav(f"{filepath}/{username}.wav")
+        newAudio = newAudio[t1*1000:t2*1000]
+        newAudio.export(f"{filepath}/{seg}.wav", format="wav")
+        t1=t2
+    os.remove(f"{filepath}/{username}.wav")
 
-gmm_files = [os.path.join(modelpath,fname) for fname in 
-              os.listdir(modelpath) if fname.endswith('.gmm')]
+    source = f"{filepath}/"
+    features = np.asarray(())
+    count=1
 
-#Load the Gaussian gender Models
-models    = [cPickle.load(open(fname,'rb')) for fname in gmm_files]
-speakers   = [fname.split("/")[-1].split(".gmm")[0] for fname 
-              in gmm_files]
+    for f in os.listdir(source):
+        sr,audio = read(source+f)
+        vector   = extract_features(audio,sr)
+        
+        if features.size == 0:
+            features = vector
+        else:
+            features = np.vstack((features, vector))
 
-error = 0
-total_sample = 0.0
+        if count == 5:    
+            gmm = GMM(n_components = 5, covariance_type='diag',n_init = 3)
+            gmm.fit(features)
+            # dumping the trained gaussian model
+            picklefile = f"{username}.gmm"
+            cPickle.dump(gmm,open("trainedModels/" + picklefile,'wb'))
+            print ('+ modeling completed for speaker:',picklefile," with data point = ",features.shape)   
+            features = np.asarray(())
+            count = 0
+        count = count + 1
+    shutil.rmtree(filepath)
 
-print("Press '1' for checking a single Audio or Press '0' for testing a complete set of audio with Accuracy?")
-take=int(input().strip())
-if take == 1:
-    print ("Enter the File name from the sample with .wav notation :")
-    path =input().strip()
-    print (("Testing Audio : ",path))
-    sr,audio = read(source + path)
+    return {"message": f"GMM Created"}
+
+
+@app.post("/api/recognize")
+async def register(file: UploadFile):
+    with open("recognize/test.wav", "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    modelpath = "trainedModels/"
+
+    gmm_files = [os.path.join(modelpath,fname) for fname in 
+                os.listdir(modelpath) if fname.endswith('.gmm')]
+
+    models    = [cPickle.load(open(fname,'rb')) for fname in gmm_files]
+    speakers   = [fname.split("/")[-1].split(".gmm")[0] for fname 
+                in gmm_files]
+
+    error = 0
+    total_sample = 0.0
+
+    sr,audio = read("recognize/test.wav")
     vector   = extract_features(audio,sr)
-    
+
     log_likelihood = np.zeros(len(models)) 
-    
+
     for i in range(len(models)):
         gmm    = models[i]  #checking with each model one by one
         scores = np.array(gmm.score(vector))
         log_likelihood[i] = scores.sum()
-    
+
     winner = np.argmax(log_likelihood)
-    print ("\tThe person in the given audio sample is detected as - ", speakers[winner])
+    os.remove("recognize/test.wav")
 
-    time.sleep(1.0)
-elif take == 0:
-    test_file = "Testing_audio_Path.txt"        
-    file_paths = open(test_file,'r')
-    # Read the test directory and get the list of test audio files 
-    for path in file_paths:   
-        total_sample+= 1.0
-        path=path.strip()
-        print("Testing Audio : ", path)
-        sr,audio = read(source + path)
-        vector   = extract_features(audio,sr)
-        log_likelihood = np.zeros(len(models)) 
-        for i in range(len(models)):
-            gmm    = models[i]  #checking with each model one by one
-            scores = np.array(gmm.score(vector))
-            log_likelihood[i] = scores.sum()
-        winner=np.argmax(log_likelihood)
-        print ("\tdetected as - ", speakers[winner])
-        checker_name = path.split("_")[0]
-        if speakers[winner] != checker_name:
-            error += 1
-        time.sleep(1.0)
-    print (error, total_sample)
-    accuracy = ((total_sample - error) / total_sample) * 100
-
-
-print ("Speaker Identified Successfully")
+    return {"message": f"Speaker Recognized as {speakers[winner]}"}
+    
